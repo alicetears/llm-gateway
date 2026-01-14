@@ -21,6 +21,9 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   lastLoginAt   DateTime? @map("last_login_at")
+  
+  // Relations
+  apiKeys       LlmApiKey[]
 
   @@map("users")
 }
@@ -47,6 +50,10 @@ model LlmApiKey {
   priority       Int       @default(1)
   enabled        Boolean   @default(true)
   
+  // Owner
+  userId         String    @map("user_id")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   // Model routing
   allowedModels  String[]  @map("allowed_models") // Models this key can access
   defaultModel   String    @map("default_model")  // Default model for this key
@@ -65,6 +72,7 @@ model LlmApiKey {
   usageLogs      UsageLog[]
 
   @@map("llm_api_keys")
+  @@index([userId])
   @@index([provider, enabled])
   @@index([priority])
   @@index([resetDate])
