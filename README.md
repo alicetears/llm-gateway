@@ -1,6 +1,52 @@
-# LLM Gateway API
+# LLM Gateway
 
-A production-grade Multi-Provider LLM Gateway API with key-aware model routing, built with Node.js, TypeScript, Fastify, PostgreSQL, and Redis.
+A self-hosted, open-source Multi-Provider LLM Gateway with key-aware model routing.
+
+> **This is a self-hosted solution.** The author does not operate any hosted service. You deploy and operate your own instance.
+
+---
+
+## Deploy Your Own Instance
+
+The fastest way to get started is to deploy your own instance using Vercel.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Falicetears%2Fllm-gateway&env=DATABASE_URL,JWT_SECRET&envDescription=DATABASE_URL%3A%20PostgreSQL%20connection%20string.%20JWT_SECRET%3A%20Random%20secret%20for%20auth%20tokens.&envLink=https%3A%2F%2Fgithub.com%2Falicetears%2Fllm-gateway%23environment-variables&project-name=my-llm-gateway&repository-name=my-llm-gateway)
+
+### What happens when you click "Deploy"
+
+1. You will be prompted to create a copy of this repository in your own GitHub account
+2. Vercel will deploy the application to **your own Vercel account**
+3. You will need to configure environment variables (database, secrets)
+4. The deployed instance is entirely under your control
+
+> ⚠️ **Important:** The author does not operate, monitor, or control any deployed instances. Each deployment is independent and managed by the person who deploys it.
+
+---
+
+## Self-Hosting Responsibility
+
+When you deploy this software, **you are the operator**. You are solely responsible for:
+
+| Responsibility | Description |
+|----------------|-------------|
+| **API Keys** | Safeguarding any LLM provider API keys you configure |
+| **Security** | Securing your deployment, setting strong secrets, and managing access |
+| **Costs** | Any charges incurred from LLM providers (OpenAI, Anthropic, etc.) |
+| **Compliance** | Adhering to the terms of service of each LLM provider you use |
+| **Data** | Any data processed through your instance |
+| **Availability** | Uptime and maintenance of your deployment |
+
+### Security Warning
+
+> ⚠️ **Do NOT use real API keys unless you understand and trust the code.**
+>
+> Before adding production API keys:
+> 1. Review the source code
+> 2. Ensure your `JWT_SECRET` is set to a strong, random value
+> 3. Understand that API keys are stored in your database
+> 4. Restrict access to your deployment appropriately
+
+---
 
 ## Features
 
@@ -8,12 +54,71 @@ A production-grade Multi-Provider LLM Gateway API with key-aware model routing, 
 - **Key-Aware Model Routing**: Each API key can be restricted to specific models with a default model
 - **Priority-Based Selection**: Route requests through keys based on configurable priority levels
 - **Quota Management**: Daily request limits per key with automatic reset
+- **User Isolation**: Each user's API tokens only access their own keys
+- **Admin Controls**: First user becomes admin; registration can be enabled/disabled
 - **Two Selection Strategies**:
   - `exhaust-first`: Use keys until quota is exhausted before moving to next
   - `round-robin`: Distribute load evenly across keys
-- **Async Processing**: Optional queue-based processing with BullMQ
-- **Comprehensive Observability**: Request logging, usage tracking, and optional response headers
-- **Automatic Fallback**: Retry with different keys on failure
+
+---
+
+## Quick Start (Vercel)
+
+### 1. Deploy
+
+Click the "Deploy with Vercel" button above.
+
+### 2. Configure Database
+
+You need a PostgreSQL database. Options:
+
+| Provider | Free Tier | Notes |
+|----------|-----------|-------|
+| [Vercel Postgres](https://vercel.com/storage/postgres) | 256 MB | Easiest - integrates directly |
+| [Neon](https://neon.tech) | 512 MB | Recommended |
+| [Supabase](https://supabase.com) | 500 MB | Full Postgres |
+
+Set the `DATABASE_URL` environment variable to your connection string.
+
+### 3. Set JWT Secret
+
+Generate a secure random string for `JWT_SECRET`:
+
+```bash
+openssl rand -base64 32
+```
+
+### 4. Create Admin Account
+
+1. Open your deployed URL
+2. Register the first account (this becomes the admin)
+3. Registration is automatically disabled after admin creation
+4. Admin can enable/disable registration in Settings
+
+### 5. Add API Keys
+
+1. Log in to the dashboard
+2. Go to "API Keys" tab
+3. Add your LLM provider API keys
+
+### 6. Generate API Token
+
+1. Go to "API Tokens" tab
+2. Generate a token for your applications
+3. Use the token to call the `/api/chat` endpoint
+
+---
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `JWT_SECRET` | Yes | Secret for signing auth tokens (use a strong random value) |
+| `REDIS_URL` | No | Redis URL (optional, for queue features) |
+| `KEY_SELECTION_STRATEGY` | No | `exhaust-first` or `round-robin` (default: `exhaust-first`) |
+
+---
 
 ## Architecture
 
@@ -47,58 +152,20 @@ A production-grade Multi-Provider LLM Gateway API with key-aware model routing, 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
-
-### Prerequisites
-
-- Node.js 20+
-- PostgreSQL
-- Redis
-
-### Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd llm-gateway
-
-# Install dependencies
-npm install
-
-# Copy environment configuration
-cp .env.example .env
-
-# Edit .env with your database and Redis URLs
-```
-
-### Database Setup
-
-```bash
-# Generate Prisma client
-npm run db:generate
-
-# Run migrations
-npm run db:migrate
-
-# Or push schema directly (development)
-npm run db:push
-```
-
-### Start the Server
-
-```bash
-# Development mode
-npm run dev
-
-# Production mode
-npm run build
-npm start
-
-# Start queue worker (separate process for async requests)
-npm run worker
-```
+---
 
 ## API Reference
+
+### Authentication
+
+All API endpoints (except `/health` and `/api/auth/*`) require a Bearer token:
+
+```bash
+curl -X POST https://your-instance.vercel.app/api/chat \
+  -H "Authorization: Bearer llm_your_token_here" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Hello!"}]}'
+```
 
 ### Chat Completion
 
@@ -112,26 +179,10 @@ npm run worker
   ],
   "model": "gpt-4o",
   "provider": "auto",
-  "allowedProviders": ["openai", "anthropic"],
-  "allowedPriorities": [1, 2],
   "temperature": 0.7,
-  "maxTokens": 1000,
-  "async": false
+  "maxTokens": 1000
 }
 ```
-
-**Request Parameters:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `messages` | array | Yes | Chat messages |
-| `model` | string | No | Model to use (uses key's default if not specified) |
-| `provider` | string | No | Provider selection: `auto`, `openai`, `anthropic`, etc. |
-| `allowedProviders` | string[] | No | Restrict to specific providers |
-| `allowedPriorities` | number[] | No | Restrict to specific priority levels |
-| `temperature` | number | No | Sampling temperature (0-2) |
-| `maxTokens` | number | No | Maximum tokens in response |
-| `async` | boolean | No | If true, queue the request and return immediately |
 
 **Response:**
 
@@ -154,12 +205,11 @@ npm run worker
     "promptTokens": 20,
     "completionTokens": 10,
     "totalTokens": 30
-  },
-  "created": 1699000000000
+  }
 }
 ```
 
-**Response Headers (when enabled):**
+**Response Headers:**
 
 - `X-LLM-Provider`: Provider used
 - `X-LLM-Model`: Model used
@@ -168,119 +218,31 @@ npm run worker
 
 ### Key Management
 
-**GET** `/api/keys` - List all API keys
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/keys` | List your API keys |
+| POST | `/api/keys` | Add a new API key |
+| DELETE | `/api/keys/:id` | Delete an API key |
 
-**POST** `/api/keys` - Create a new API key
+### Token Management
 
-```json
-{
-  "provider": "openai",
-  "apiKey": "sk-...",
-  "name": "Production OpenAI Key",
-  "priority": 1,
-  "enabled": true,
-  "allowedModels": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
-  "defaultModel": "gpt-4o-mini",
-  "dailyLimit": 1000
-}
-```
-
-**PUT** `/api/keys/:id` - Update a key
-
-**DELETE** `/api/keys/:id` - Delete a key
-
-**GET** `/api/keys/:id/usage` - Get usage history
-
-**POST** `/api/keys/:id/reset` - Reset daily usage
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tokens` | List your API tokens |
+| POST | `/api/tokens` | Generate a new token |
+| DELETE | `/api/tokens/:id` | Revoke a token |
 
 ### Health Checks
 
-- **GET** `/health` - Basic health check
-- **GET** `/health/ready` - Readiness check (includes dependencies)
-- **GET** `/health/live` - Liveness check
+| Endpoint | Description |
+|----------|-------------|
+| `/health` | Basic health check |
+| `/health/ready` | Readiness (includes DB) |
+| `/health/live` | Liveness check |
 
-### Queue Statistics
+---
 
-**GET** `/api/queue/stats`
-
-```json
-{
-  "waiting": 5,
-  "active": 2,
-  "completed": 1000,
-  "failed": 3,
-  "delayed": 0
-}
-```
-
-## Key-Aware Model Routing
-
-### How It Works
-
-1. **Request arrives** with optional `model` and `provider` parameters
-2. **Filter keys** by:
-   - `enabled` status
-   - `allowedProviders` (if specified in request)
-   - `allowedPriorities` (if specified in request)
-   - Provider match (if not `auto`)
-3. **For each priority group** (ascending order):
-   - Filter keys with remaining quota
-   - Filter keys whose `allowed_models` include the requested model
-   - Select key using configured strategy
-4. **Resolve model**:
-   - Use `request.model` if provided
-   - Otherwise use `key.default_model`
-5. **Execute request** with selected key
-6. **Update usage** and log
-
-### Model Matching
-
-Keys can specify allowed models using:
-
-- **Exact match**: `"gpt-4o"` matches only `gpt-4o`
-- **Wildcard**: `"gpt-4*"` matches `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`
-- **All models**: `"*"` or empty array allows all models
-
-### Example Key Configurations
-
-```json
-// Production key for expensive models with low limit
-{
-  "provider": "openai",
-  "priority": 1,
-  "allowedModels": ["gpt-4o", "o1-preview"],
-  "defaultModel": "gpt-4o",
-  "dailyLimit": 100
-}
-
-// High-volume key for cheaper models
-{
-  "provider": "openai", 
-  "priority": 2,
-  "allowedModels": ["gpt-4o-mini", "gpt-3.5-turbo"],
-  "defaultModel": "gpt-4o-mini",
-  "dailyLimit": 10000
-}
-
-// Fallback to OpenRouter for any model
-{
-  "provider": "openrouter",
-  "priority": 3,
-  "allowedModels": ["*"],
-  "defaultModel": "anthropic/claude-3.5-sonnet",
-  "dailyLimit": null
-}
-```
-
-## Provider Adapters
-
-Each provider adapter:
-
-1. **Validates model compatibility** - Checks if model is supported
-2. **Maps model names** - Translates aliases (e.g., `claude-3.5-sonnet` → `claude-3-5-sonnet-20241022`)
-3. **Returns unified response** - Consistent format across providers
-
-### Supported Providers
+## Supported Providers
 
 | Provider | API Type | Base URL |
 |----------|----------|----------|
@@ -294,199 +256,74 @@ Each provider adapter:
 | Fireworks AI | OpenAI-compatible | https://api.fireworks.ai/inference/v1 |
 | DeepSeek | OpenAI-compatible | https://api.deepseek.com/v1 |
 
-## Configuration
+---
 
-### Environment Variables
+## Alternative Deployment Methods
 
-```bash
-# Server
-NODE_ENV=production
-PORT=3000
-HOST=0.0.0.0
-
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/llm_gateway
-
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# Key Selection Strategy
-KEY_SELECTION_STRATEGY=exhaust-first  # or round-robin
-
-# Rate Limiting
-RATE_LIMIT_MAX=100
-RATE_LIMIT_WINDOW_MS=60000
-
-# Retry Configuration
-MAX_RETRIES=3
-RETRY_DELAY_MS=1000
-
-# Queue
-QUEUE_CONCURRENCY=10
-
-# Observability
-ENABLE_LLM_HEADERS=true
-LOG_LEVEL=info
-```
-
-## Database Schema
-
-```sql
-CREATE TABLE llm_api_keys (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider        VARCHAR NOT NULL,
-  api_key         VARCHAR NOT NULL,
-  name            VARCHAR,
-  priority        INT DEFAULT 1,
-  enabled         BOOLEAN DEFAULT true,
-  allowed_models  TEXT[],
-  default_model   VARCHAR NOT NULL,
-  daily_limit     INT,
-  used_today      INT DEFAULT 0,
-  reset_date      TIMESTAMP DEFAULT NOW(),
-  created_at      TIMESTAMP DEFAULT NOW(),
-  updated_at      TIMESTAMP DEFAULT NOW(),
-  last_used_at    TIMESTAMP
-);
-
-CREATE TABLE usage_logs (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  key_id            UUID REFERENCES llm_api_keys(id) ON DELETE CASCADE,
-  provider          VARCHAR NOT NULL,
-  model             VARCHAR NOT NULL,
-  requested_model   VARCHAR,
-  prompt_tokens     INT,
-  completion_tokens INT,
-  total_tokens      INT,
-  latency_ms        INT,
-  success           BOOLEAN DEFAULT true,
-  error_message     VARCHAR,
-  request_id        VARCHAR,
-  created_at        TIMESTAMP DEFAULT NOW()
-);
-```
-
-## Queue Worker
-
-For high-throughput scenarios, requests can be processed asynchronously:
+### Local Development
 
 ```bash
-# Start the worker
-npm run worker
+# Clone the repository
+git clone https://github.com/alicetears/llm-gateway.git
+cd llm-gateway
+
+# Install dependencies
+npm install
+
+# Set up environment
+cp .env.example .env
+# Edit .env with your DATABASE_URL and JWT_SECRET
+
+# Generate Prisma client and push schema
+npm run db:generate
+npm run db:push
+
+# Start development server
+npm run dev
 ```
 
-**Async Request Flow:**
+### Docker
 
-1. Client sends request with `async: true`
-2. Server returns `202 Accepted` with `requestId`
-3. Worker processes the request
-4. Client polls `GET /api/chat/:requestId` for result
-
-## Error Handling
-
-All errors follow a consistent format:
-
-```json
-{
-  "error": {
-    "code": "NO_ELIGIBLE_KEY",
-    "message": "No eligible API key found for model: gpt-4o",
-    "details": {
-      "model": "gpt-4o",
-      "provider": "openai"
-    }
-  },
-  "requestId": "req_abc123"
-}
+```bash
+docker-compose up -d
 ```
 
-**Error Codes:**
+### Docker Compose
+
+The included `docker-compose.yml` provides:
+- PostgreSQL database
+- Redis (optional, for queue features)
+- LLM Gateway API
+- Queue worker
+
+---
+
+## Error Codes
 
 | Code | Status | Description |
 |------|--------|-------------|
 | `VALIDATION_ERROR` | 400 | Invalid request body |
-| `MODEL_NOT_SUPPORTED` | 400 | Model not supported by provider |
-| `NO_ELIGIBLE_KEY` | 429 | No key available (quota/model mismatch) |
-| `RATE_LIMIT_EXCEEDED` | 429 | Gateway rate limit exceeded |
-| `PROVIDER_ERROR` | 500 | Provider API error |
-| `INTERNAL_ERROR` | 500 | Unexpected error |
+| `UNAUTHORIZED` | 401 | Missing or invalid token |
+| `FORBIDDEN` | 403 | Insufficient permissions |
+| `NO_ELIGIBLE_KEY` | 400 | No API key available for request |
+| `PROVIDER_ERROR` | 502 | LLM provider returned an error |
+| `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
 
-## Production Deployment
-
-### Docker
-
-```dockerfile
-FROM node:20-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY dist ./dist
-COPY prisma ./prisma
-RUN npx prisma generate
-CMD ["node", "dist/index.js"]
-```
-
-### Kubernetes
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: llm-gateway
-spec:
-  replicas: 3
-  template:
-    spec:
-      containers:
-        - name: api
-          image: llm-gateway:latest
-          ports:
-            - containerPort: 3000
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: llm-gateway-secrets
-                  key: database-url
-          livenessProbe:
-            httpGet:
-              path: /health/live
-              port: 3000
-          readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 3000
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: llm-gateway-worker
-spec:
-  replicas: 2
-  template:
-    spec:
-      containers:
-        - name: worker
-          image: llm-gateway:latest
-          command: ["node", "dist/queue/worker.js"]
-```
-
-## Development
-
-```bash
-# Run in development mode
-npm run dev
-
-# Type checking
-npm run typecheck
-
-# Linting
-npm run lint
-
-# Open Prisma Studio
-npm run db:studio
-```
 
 ## License
 
 MIT
+
+---
+
+## Disclaimer
+
+This software is provided "as is", without warranty of any kind. The author:
+
+- Does **not** operate any hosted service
+- Does **not** have access to your deployment
+- Is **not** responsible for your use of this software
+- Is **not** responsible for any costs, damages, or liabilities arising from your use
+
+You are solely responsible for your deployment and its compliance with applicable laws and provider terms of service.
