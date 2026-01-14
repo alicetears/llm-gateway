@@ -10,6 +10,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// System settings (singleton table)
+model SystemSettings {
+  id                    String   @id @default("system") // Always "system" - singleton
+  registrationEnabled   Boolean  @default(true) @map("registration_enabled")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  updatedBy             String?  @map("updated_by") // Admin who last changed settings
+
+  @@map("system_settings")
+}
+
 // User accounts for admin access
 model User {
   id            String    @id @default(uuid())
