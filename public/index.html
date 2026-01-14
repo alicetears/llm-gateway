@@ -206,10 +206,11 @@
 
         <div class="bg-gray-800 rounded-lg p-6 mt-6">
           <h3 class="text-lg font-semibold mb-3">How to Use</h3>
-          <pre class="bg-gray-900 rounded p-4 text-sm overflow-x-auto"><code>curl -X POST https://your-gateway.vercel.app/api/chat \
+          <pre id="api-usage-example" class="bg-gray-900 rounded p-4 text-sm overflow-x-auto"><code>curl -X POST <span id="api-base-url"></span>/api/chat \
   -H "Authorization: Bearer llm_your_token_here" \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Hello!"}]}'</code></pre>
+          <button onclick="copyUsageExample()" class="mt-3 text-sm text-blue-400 hover:text-blue-300">📋 Copy command</button>
         </div>
       </div>
 
@@ -809,6 +810,24 @@
       alert('Token copied to clipboard!');
     }
 
+    function copyUsageExample() {
+      const baseUrl = window.location.origin;
+      const example = `curl -X POST ${baseUrl}/api/chat \\
+  -H "Authorization: Bearer llm_your_token_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{"messages":[{"role":"user","content":"Hello!"}]}'`;
+      navigator.clipboard.writeText(example);
+      alert('Command copied to clipboard!');
+    }
+
+    // Update API base URL in examples
+    function updateApiBaseUrl() {
+      const baseUrlEl = document.getElementById('api-base-url');
+      if (baseUrlEl) {
+        baseUrlEl.textContent = window.location.origin;
+      }
+    }
+
     // ============================================================================
     // Admin Functions
     // ============================================================================
@@ -850,7 +869,8 @@
       }
     }
 
-    // Initial auth check
+    // Initial setup
+    updateApiBaseUrl();
     checkRegistrationStatus();
     checkAuth();
   </script>
