@@ -11,168 +11,212 @@
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen">
-  <div class="container mx-auto px-4 py-8 max-w-6xl">
-    <!-- Header -->
-    <div class="mb-8">
-      <h1 class="text-3xl font-bold text-white mb-2">🚀 LLM Gateway</h1>
-      <p class="text-gray-400">Multi-Provider API with Key-Aware Model Routing</p>
-    </div>
-
-    <!-- Tabs -->
-    <div class="flex space-x-1 mb-6 border-b border-gray-700">
-      <button onclick="showTab('keys')" id="tab-keys" class="tab-btn px-4 py-2 rounded-t-lg bg-gray-800 text-white border-b-2 border-blue-500">
-        🔑 API Keys
-      </button>
-      <button onclick="showTab('test')" id="tab-test" class="tab-btn px-4 py-2 rounded-t-lg text-gray-400 hover:text-white">
-        💬 Test Chat
-      </button>
-      <button onclick="showTab('stats')" id="tab-stats" class="tab-btn px-4 py-2 rounded-t-lg text-gray-400 hover:text-white">
-        📊 Stats
-      </button>
-      <button onclick="showTab('docs')" id="tab-docs" class="tab-btn px-4 py-2 rounded-t-lg text-gray-400 hover:text-white">
-        📖 API Docs
-      </button>
-    </div>
-
-    <!-- Keys Tab -->
-    <div id="content-keys" class="tab-content active">
-      <div class="bg-gray-800 rounded-lg p-6 mb-6">
-        <h2 class="text-xl font-semibold mb-4">Add New API Key</h2>
-        <form id="add-key-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Provider</label>
-            <select id="provider" class="w-full bg-gray-700 rounded px-3 py-2 text-white">
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="openrouter">OpenRouter</option>
-              <option value="gemini">Google Gemini</option>
-              <option value="mistral">Mistral</option>
-              <option value="groq">Groq</option>
-              <option value="together">Together AI</option>
-              <option value="fireworks">Fireworks AI</option>
-              <option value="deepseek">DeepSeek</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Name (optional)</label>
-            <input type="text" id="name" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="My OpenAI Key">
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-sm text-gray-400 mb-1">API Key</label>
-            <input type="password" id="apiKey" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="sk-..." required>
-          </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Default Model</label>
-            <input type="text" id="defaultModel" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="gpt-4o-mini" required>
-          </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Priority (1 = highest)</label>
-            <input type="number" id="priority" value="1" min="1" class="w-full bg-gray-700 rounded px-3 py-2 text-white">
-          </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Allowed Models (comma-separated, empty = all)</label>
-            <input type="text" id="allowedModels" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="gpt-4o, gpt-4o-mini">
-          </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Daily Limit (empty = unlimited)</label>
-            <input type="number" id="dailyLimit" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="1000">
-          </div>
-          <div class="md:col-span-2">
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-medium">
-              ➕ Add Key
-            </button>
-          </div>
-        </form>
+  
+  <!-- Auth Modal -->
+  <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4">
+      <h2 id="auth-title" class="text-2xl font-bold mb-6 text-center">Login</h2>
+      
+      <form id="auth-form" class="space-y-4">
+        <div id="name-field" class="hidden">
+          <label class="block text-sm text-gray-400 mb-1">Name</label>
+          <input type="text" id="auth-name" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="Your name">
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Email</label>
+          <input type="email" id="auth-email" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="you@example.com" required>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Password</label>
+          <input type="password" id="auth-password" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="••••••••" required minlength="6">
+        </div>
+        <div id="auth-error" class="text-red-400 text-sm hidden"></div>
+        <button type="submit" id="auth-submit" class="w-full bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-medium">
+          Login
+        </button>
+      </form>
+      
+      <div class="mt-4 text-center text-sm text-gray-400">
+        <span id="auth-switch-text">Don't have an account?</span>
+        <button onclick="toggleAuthMode()" class="text-blue-400 hover:text-blue-300 ml-1" id="auth-switch-btn">Register</button>
       </div>
-
-      <div class="bg-gray-800 rounded-lg p-6">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-semibold">API Keys</h2>
-          <button onclick="loadKeys()" class="text-blue-400 hover:text-blue-300">🔄 Refresh</button>
-        </div>
-        <div id="keys-list" class="space-y-3">
-          <p class="text-gray-500">Loading...</p>
-        </div>
+      
+      <div class="mt-4 text-center text-xs text-gray-500">
+        First user to register becomes admin
       </div>
     </div>
+  </div>
 
-    <!-- Test Chat Tab -->
-    <div id="content-test" class="tab-content">
-      <div class="bg-gray-800 rounded-lg p-6">
-        <h2 class="text-xl font-semibold mb-4">Test Chat Completion</h2>
-        <form id="chat-form" class="space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <!-- Main App -->
+  <div id="app" class="hidden">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+      <!-- Header -->
+      <div class="mb-8 flex justify-between items-center">
+        <div>
+          <h1 class="text-3xl font-bold text-white mb-2">🚀 LLM Gateway</h1>
+          <p class="text-gray-400">Multi-Provider API with Key-Aware Model Routing</p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <span id="user-info" class="text-gray-400"></span>
+          <button onclick="logout()" class="text-red-400 hover:text-red-300">Logout</button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex space-x-1 mb-6 border-b border-gray-700">
+        <button onclick="showTab('keys')" id="tab-keys" class="tab-btn px-4 py-2 rounded-t-lg bg-gray-800 text-white border-b-2 border-blue-500">
+          🔑 API Keys
+        </button>
+        <button onclick="showTab('test')" id="tab-test" class="tab-btn px-4 py-2 rounded-t-lg text-gray-400 hover:text-white">
+          💬 Test Chat
+        </button>
+        <button onclick="showTab('stats')" id="tab-stats" class="tab-btn px-4 py-2 rounded-t-lg text-gray-400 hover:text-white">
+          📊 Stats
+        </button>
+        <button onclick="showTab('docs')" id="tab-docs" class="tab-btn px-4 py-2 rounded-t-lg text-gray-400 hover:text-white">
+          📖 API Docs
+        </button>
+      </div>
+
+      <!-- Keys Tab -->
+      <div id="content-keys" class="tab-content active">
+        <div class="bg-gray-800 rounded-lg p-6 mb-6">
+          <h2 class="text-xl font-semibold mb-4">Add New API Key</h2>
+          <form id="add-key-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm text-gray-400 mb-1">Provider</label>
-              <select id="chat-provider" class="w-full bg-gray-700 rounded px-3 py-2 text-white">
-                <option value="auto">Auto (recommended)</option>
+              <select id="provider" class="w-full bg-gray-700 rounded px-3 py-2 text-white">
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="openrouter">OpenRouter</option>
                 <option value="gemini">Google Gemini</option>
+                <option value="mistral">Mistral</option>
                 <option value="groq">Groq</option>
+                <option value="together">Together AI</option>
+                <option value="fireworks">Fireworks AI</option>
+                <option value="deepseek">DeepSeek</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm text-gray-400 mb-1">Model (optional)</label>
-              <input type="text" id="chat-model" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="Leave empty for default">
+              <label class="block text-sm text-gray-400 mb-1">Name (optional)</label>
+              <input type="text" id="name" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="My OpenAI Key">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm text-gray-400 mb-1">API Key</label>
+              <input type="password" id="apiKey" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="sk-..." required>
             </div>
             <div>
-              <label class="block text-sm text-gray-400 mb-1">Temperature</label>
-              <input type="number" id="chat-temp" value="0.7" min="0" max="2" step="0.1" class="w-full bg-gray-700 rounded px-3 py-2 text-white">
+              <label class="block text-sm text-gray-400 mb-1">Default Model</label>
+              <input type="text" id="defaultModel" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="gpt-4o-mini" required>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Priority (1 = highest)</label>
+              <input type="number" id="priority" value="1" min="1" class="w-full bg-gray-700 rounded px-3 py-2 text-white">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Allowed Models (comma-separated, empty = all)</label>
+              <input type="text" id="allowedModels" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="gpt-4o, gpt-4o-mini">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Daily Limit (empty = unlimited)</label>
+              <input type="number" id="dailyLimit" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="1000">
+            </div>
+            <div class="md:col-span-2">
+              <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-medium">
+                ➕ Add Key
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div class="bg-gray-800 rounded-lg p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">API Keys</h2>
+            <button onclick="loadKeys()" class="text-blue-400 hover:text-blue-300">🔄 Refresh</button>
+          </div>
+          <div id="keys-list" class="space-y-3">
+            <p class="text-gray-500">Loading...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Chat Tab -->
+      <div id="content-test" class="tab-content">
+        <div class="bg-gray-800 rounded-lg p-6">
+          <h2 class="text-xl font-semibold mb-4">Test Chat Completion</h2>
+          <form id="chat-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Provider</label>
+                <select id="chat-provider" class="w-full bg-gray-700 rounded px-3 py-2 text-white">
+                  <option value="auto">Auto (recommended)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="groq">Groq</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Model (optional)</label>
+                <input type="text" id="chat-model" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="Leave empty for default">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Temperature</label>
+                <input type="number" id="chat-temp" value="0.7" min="0" max="2" step="0.1" class="w-full bg-gray-700 rounded px-3 py-2 text-white">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">System Message (optional)</label>
+              <input type="text" id="chat-system" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="You are a helpful assistant.">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">User Message</label>
+              <textarea id="chat-message" rows="3" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="Hello! How are you?" required></textarea>
+            </div>
+            <button type="submit" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-medium">
+              🚀 Send Request
+            </button>
+          </form>
+
+          <div id="chat-result" class="mt-6 hidden">
+            <h3 class="text-lg font-medium mb-2">Response</h3>
+            <div class="bg-gray-900 rounded p-4">
+              <div id="chat-meta" class="text-sm text-gray-400 mb-2"></div>
+              <div id="chat-response" class="text-white whitespace-pre-wrap"></div>
             </div>
           </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">System Message (optional)</label>
-            <input type="text" id="chat-system" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="You are a helpful assistant.">
-          </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">User Message</label>
-            <textarea id="chat-message" rows="3" class="w-full bg-gray-700 rounded px-3 py-2 text-white" placeholder="Hello! How are you?" required></textarea>
-          </div>
-          <button type="submit" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-medium">
-            🚀 Send Request
-          </button>
-        </form>
+        </div>
+      </div>
 
-        <div id="chat-result" class="mt-6 hidden">
-          <h3 class="text-lg font-medium mb-2">Response</h3>
-          <div class="bg-gray-900 rounded p-4">
-            <div id="chat-meta" class="text-sm text-gray-400 mb-2"></div>
-            <div id="chat-response" class="text-white whitespace-pre-wrap"></div>
+      <!-- Stats Tab -->
+      <div id="content-stats" class="tab-content">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">Key Usage Stats</h2>
+            <div id="usage-stats" class="space-y-3">
+              <p class="text-gray-500">Loading...</p>
+            </div>
+          </div>
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">Queue Stats</h2>
+            <div id="queue-stats" class="space-y-3">
+              <p class="text-gray-500">Loading...</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Stats Tab -->
-    <div id="content-stats" class="tab-content">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Docs Tab -->
+      <div id="content-docs" class="tab-content">
         <div class="bg-gray-800 rounded-lg p-6">
-          <h2 class="text-xl font-semibold mb-4">Key Usage Stats</h2>
-          <div id="usage-stats" class="space-y-3">
-            <p class="text-gray-500">Loading...</p>
-          </div>
-        </div>
-        <div class="bg-gray-800 rounded-lg p-6">
-          <h2 class="text-xl font-semibold mb-4">Queue Stats</h2>
-          <div id="queue-stats" class="space-y-3">
-            <p class="text-gray-500">Loading...</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Docs Tab -->
-    <div id="content-docs" class="tab-content">
-      <div class="bg-gray-800 rounded-lg p-6">
-        <h2 class="text-xl font-semibold mb-4">API Documentation</h2>
-        
-        <div class="space-y-6">
-          <div>
-            <h3 class="text-lg font-medium text-blue-400 mb-2">POST /api/chat</h3>
-            <p class="text-gray-400 mb-2">Send a chat completion request</p>
-            <pre class="bg-gray-900 rounded p-4 text-sm overflow-x-auto"><code>{
+          <h2 class="text-xl font-semibold mb-4">API Documentation</h2>
+          
+          <div class="space-y-6">
+            <div>
+              <h3 class="text-lg font-medium text-blue-400 mb-2">POST /api/chat</h3>
+              <p class="text-gray-400 mb-2">Send a chat completion request</p>
+              <pre class="bg-gray-900 rounded p-4 text-sm overflow-x-auto"><code>{
   "messages": [
     {"role": "system", "content": "You are helpful."},
     {"role": "user", "content": "Hello!"}
@@ -182,26 +226,36 @@
   "temperature": 0.7,       // optional
   "maxTokens": 1000         // optional
 }</code></pre>
-          </div>
+            </div>
 
-          <div>
-            <h3 class="text-lg font-medium text-blue-400 mb-2">Response Headers</h3>
-            <ul class="text-gray-400 space-y-1">
-              <li><code class="text-green-400">X-LLM-Provider</code> - Provider used</li>
-              <li><code class="text-green-400">X-LLM-Model</code> - Model used</li>
-              <li><code class="text-green-400">X-LLM-Key-ID</code> - Key ID used</li>
-              <li><code class="text-green-400">X-LLM-Latency-Ms</code> - Request latency</li>
-            </ul>
-          </div>
+            <div>
+              <h3 class="text-lg font-medium text-blue-400 mb-2">Response Headers</h3>
+              <ul class="text-gray-400 space-y-1">
+                <li><code class="text-green-400">X-LLM-Provider</code> - Provider used</li>
+                <li><code class="text-green-400">X-LLM-Model</code> - Model used</li>
+                <li><code class="text-green-400">X-LLM-Key-ID</code> - Key ID used</li>
+                <li><code class="text-green-400">X-LLM-Latency-Ms</code> - Request latency</li>
+              </ul>
+            </div>
 
-          <div>
-            <h3 class="text-lg font-medium text-blue-400 mb-2">Key Management</h3>
-            <ul class="text-gray-400 space-y-1">
-              <li><code class="text-yellow-400">GET</code> <code>/api/keys</code> - List all keys</li>
-              <li><code class="text-green-400">POST</code> <code>/api/keys</code> - Create key</li>
-              <li><code class="text-blue-400">PUT</code> <code>/api/keys/:id</code> - Update key</li>
-              <li><code class="text-red-400">DELETE</code> <code>/api/keys/:id</code> - Delete key</li>
-            </ul>
+            <div>
+              <h3 class="text-lg font-medium text-blue-400 mb-2">Authentication</h3>
+              <ul class="text-gray-400 space-y-1">
+                <li><code class="text-green-400">POST</code> <code>/api/auth/register</code> - Register new user</li>
+                <li><code class="text-green-400">POST</code> <code>/api/auth/login</code> - Login</li>
+                <li><code class="text-yellow-400">GET</code> <code>/api/auth/me</code> - Get current user (requires Bearer token)</li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 class="text-lg font-medium text-blue-400 mb-2">Key Management</h3>
+              <ul class="text-gray-400 space-y-1">
+                <li><code class="text-yellow-400">GET</code> <code>/api/keys</code> - List all keys</li>
+                <li><code class="text-green-400">POST</code> <code>/api/keys</code> - Create key</li>
+                <li><code class="text-blue-400">PUT</code> <code>/api/keys/:id</code> - Update key</li>
+                <li><code class="text-red-400">DELETE</code> <code>/api/keys/:id</code> - Delete key</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -210,8 +264,106 @@
 
   <script>
     const API_BASE = '/api';
+    let authToken = localStorage.getItem('token');
+    let currentUser = null;
+    let isLoginMode = true;
 
-    // Tab switching
+    // ============================================================================
+    // Auth Functions
+    // ============================================================================
+
+    function toggleAuthMode() {
+      isLoginMode = !isLoginMode;
+      document.getElementById('auth-title').textContent = isLoginMode ? 'Login' : 'Register';
+      document.getElementById('auth-submit').textContent = isLoginMode ? 'Login' : 'Register';
+      document.getElementById('auth-switch-text').textContent = isLoginMode ? "Don't have an account?" : "Already have an account?";
+      document.getElementById('auth-switch-btn').textContent = isLoginMode ? 'Register' : 'Login';
+      document.getElementById('name-field').classList.toggle('hidden', isLoginMode);
+      document.getElementById('auth-error').classList.add('hidden');
+    }
+
+    document.getElementById('auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const email = document.getElementById('auth-email').value;
+      const password = document.getElementById('auth-password').value;
+      const name = document.getElementById('auth-name').value;
+      
+      const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
+      const body = isLoginMode ? { email, password } : { email, password, name };
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          authToken = data.token;
+          currentUser = data.user;
+          localStorage.setItem('token', authToken);
+          showApp();
+        } else {
+          document.getElementById('auth-error').textContent = data.error?.message || 'Authentication failed';
+          document.getElementById('auth-error').classList.remove('hidden');
+        }
+      } catch (err) {
+        document.getElementById('auth-error').textContent = err.message;
+        document.getElementById('auth-error').classList.remove('hidden');
+      }
+    });
+
+    async function checkAuth() {
+      if (!authToken) {
+        showAuthModal();
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          currentUser = data.user;
+          showApp();
+        } else {
+          localStorage.removeItem('token');
+          authToken = null;
+          showAuthModal();
+        }
+      } catch {
+        showAuthModal();
+      }
+    }
+
+    function showAuthModal() {
+      document.getElementById('auth-modal').classList.remove('hidden');
+      document.getElementById('app').classList.add('hidden');
+    }
+
+    function showApp() {
+      document.getElementById('auth-modal').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      document.getElementById('user-info').textContent = `${currentUser?.email} (${currentUser?.role})`;
+      loadKeys();
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      authToken = null;
+      currentUser = null;
+      showAuthModal();
+    }
+
+    // ============================================================================
+    // Tab Switching
+    // ============================================================================
+
     function showTab(tab) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => {
@@ -228,10 +380,22 @@
       if (tab === 'stats') loadStats();
     }
 
-    // Load keys
+    // ============================================================================
+    // API Functions (with auth)
+    // ============================================================================
+
+    async function apiRequest(url, options = {}) {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
+        ...options.headers,
+      };
+      return fetch(url, { ...options, headers });
+    }
+
     async function loadKeys() {
       try {
-        const res = await fetch(`${API_BASE}/keys`);
+        const res = await apiRequest(`${API_BASE}/keys`);
         const data = await res.json();
         
         if (data.keys && data.keys.length > 0) {
@@ -262,7 +426,6 @@
       }
     }
 
-    // Add key
     document.getElementById('add-key-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       
@@ -280,9 +443,8 @@
       };
 
       try {
-        const res = await fetch(`${API_BASE}/keys`, {
+        const res = await apiRequest(`${API_BASE}/keys`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         
@@ -299,12 +461,11 @@
       }
     });
 
-    // Delete key
     async function deleteKey(id) {
       if (!confirm('Are you sure you want to delete this key?')) return;
       
       try {
-        const res = await fetch(`${API_BASE}/keys/${id}`, { method: 'DELETE' });
+        const res = await apiRequest(`${API_BASE}/keys/${id}`, { method: 'DELETE' });
         if (res.ok) {
           loadKeys();
         } else {
@@ -315,7 +476,6 @@
       }
     }
 
-    // Test chat
     document.getElementById('chat-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       
@@ -338,9 +498,8 @@
       document.getElementById('chat-response').textContent = '';
 
       try {
-        const res = await fetch(`${API_BASE}/chat`, {
+        const res = await apiRequest(`${API_BASE}/chat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         
@@ -368,12 +527,11 @@
       }
     });
 
-    // Load stats
     async function loadStats() {
       try {
         const [keysRes, queueRes] = await Promise.all([
-          fetch(`${API_BASE}/keys/stats`),
-          fetch(`${API_BASE}/queue/stats`),
+          apiRequest(`${API_BASE}/keys/stats`),
+          apiRequest(`${API_BASE}/queue/stats`),
         ]);
         
         const keysData = await keysRes.json();
@@ -401,8 +559,8 @@
       }
     }
 
-    // Initial load
-    loadKeys();
+    // Initial auth check
+    checkAuth();
   </script>
 </body>
 </html>
