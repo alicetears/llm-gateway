@@ -4,7 +4,7 @@ import { jwtVerify } from 'jose';
 import { ChatRequestSchema } from '../src/types/index.js';
 import { getRouter } from '../src/services/router.js';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'INSECURE-CHANGE-ME');
 
 // ============================================================================
 // Auth Helper

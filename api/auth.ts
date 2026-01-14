@@ -3,7 +3,36 @@ import bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { getPrismaClient } from '../src/utils/database.js';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+const JWT_SECRET_STRING = process.env.JWT_SECRET;
+const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_STRING || 'INSECURE-CHANGE-ME');
+
+// Simple in-memory rate limiting for auth
+const authAttempts = new Map<string, { count: number; resetAt: number }>();
+const MAX_AUTH_ATTEMPTS = 5;
+const AUTH_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = authAttempts.get(ip);
+  
+  if (!record || now > record.resetAt) {
+    authAttempts.set(ip, { count: 1, resetAt: now + AUTH_WINDOW_MS });
+    return true;
+  }
+  
+  if (record.count >= MAX_AUTH_ATTEMPTS) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
+
+function getClientIP(req: VercelRequest): string {
+  return (req.headers['x-forwarded-for'] as string)?.split(',')[0] || 
+         (req.headers['x-real-ip'] as string) || 
+         'unknown';
+}
 
 // ============================================================================
 // Auth API Handler
@@ -108,6 +137,14 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
 // ============================================================================
 
 async function handleLogin(req: VercelRequest, res: VercelResponse) {
+  // Rate limiting
+  const clientIP = getClientIP(req);
+  if (!checkRateLimit(clientIP)) {
+    return res.status(429).json({ 
+      error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Try again in 15 minutes.' } 
+    });
+  }
+
   const { email, password } = req.body;
 
   if (!email || !password) {
