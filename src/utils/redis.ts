@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { config } from '../config/index.js';
 import { createLogger } from './logger.js';
 
@@ -23,11 +23,11 @@ export function getRedisClient(): Redis {
     }
 
     try {
-      redisClient = new Redis(config.redisUrl, {
+      const client = new Redis(config.redisUrl, {
         maxRetriesPerRequest: null, // Required for BullMQ
         enableReadyCheck: false,
         lazyConnect: true,
-        retryStrategy(times) {
+        retryStrategy(times: number) {
           if (times > 3) {
             redisAvailable = false;
             return null; // Stop retrying
@@ -38,18 +38,20 @@ export function getRedisClient(): Redis {
         },
       });
 
-      redisClient.on('connect', () => {
+      client.on('connect', () => {
         redisAvailable = true;
         logger.info('Redis connected');
       });
 
-      redisClient.on('error', (err) => {
+      client.on('error', (err: Error) => {
         logger.error({ error: err.message }, 'Redis connection error');
       });
 
-      redisClient.on('close', () => {
+      client.on('close', () => {
         logger.warn('Redis connection closed');
       });
+
+      redisClient = client;
     } catch (error) {
       redisAvailable = false;
       throw error;

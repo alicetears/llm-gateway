@@ -24,8 +24,32 @@ model User {
   
   // Relations
   apiKeys       LlmApiKey[]
+  apiTokens     ApiToken[]
 
   @@map("users")
+}
+
+// API Tokens for programmatic access
+model ApiToken {
+  id            String    @id @default(uuid())
+  token         String    @unique // hashed token
+  name          String    // friendly name like "My App Token"
+  userId        String    @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Permissions
+  enabled       Boolean   @default(true)
+  expiresAt     DateTime? @map("expires_at")
+  
+  // Usage tracking
+  lastUsedAt    DateTime? @map("last_used_at")
+  usageCount    Int       @default(0) @map("usage_count")
+  
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("api_tokens")
+  @@index([token])
+  @@index([userId])
 }
 
 // Supported LLM providers
