@@ -2,6 +2,7 @@
   "name": "llm-gateway",
   "version": "1.0.0",
   "description": "Production-grade Multi-Provider LLM Gateway API with key-aware model routing",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -16,31 +17,32 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@fastify/cors": "^10.0.1",
+    "@fastify/helmet": "^12.0.1",
+    "@fastify/rate-limit": "^10.1.1",
+    "@google/generative-ai": "^0.21.0",
     "@prisma/client": "^5.22.0",
     "bullmq": "^5.25.0",
     "dotenv": "^16.4.5",
     "fastify": "^5.1.0",
-    "@fastify/cors": "^10.0.1",
-    "@fastify/helmet": "^12.0.1",
-    "@fastify/rate-limit": "^10.1.1",
     "ioredis": "^5.4.1",
     "openai": "^4.72.0",
-    "@anthropic-ai/sdk": "^0.32.1",
-    "@google/generative-ai": "^0.21.0",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
-    "zod": "^3.23.8",
-    "uuid": "^11.0.3"
+    "uuid": "^11.0.3",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "@types/uuid": "^10.0.0",
-    "prisma": "^5.22.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
     "@typescript-eslint/eslint-plugin": "^8.14.0",
     "@typescript-eslint/parser": "^8.14.0",
-    "eslint": "^9.15.0"
+    "@vercel/node": "^5.5.19",
+    "eslint": "^9.15.0",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
   },
   "engines": {
     "node": ">=20.0.0"

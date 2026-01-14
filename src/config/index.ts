@@ -17,8 +17,8 @@ const ConfigSchema = z.object({
   // Database
   databaseUrl: z.string().url(),
 
-  // Redis
-  redisUrl: z.string().default('redis://localhost:6379'),
+  // Redis (optional for serverless deployments)
+  redisUrl: z.string().optional(),
 
   // API Configuration
   apiKeyHeader: z.string().default('x-api-key'),

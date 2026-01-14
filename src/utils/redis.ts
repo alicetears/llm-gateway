@@ -9,30 +9,51 @@ const logger = createLogger('redis');
 // ============================================================================
 
 let redisClient: Redis | null = null;
+let redisAvailable = true;
+
+export function isRedisAvailable(): boolean {
+  return redisAvailable && !!config.redisUrl;
+}
 
 export function getRedisClient(): Redis {
   if (!redisClient) {
-    redisClient = new Redis(config.redisUrl, {
-      maxRetriesPerRequest: null, // Required for BullMQ
-      enableReadyCheck: false,
-      retryStrategy(times) {
-        const delay = Math.min(times * 50, 2000);
-        logger.warn({ times, delay }, 'Redis connection retry');
-        return delay;
-      },
-    });
+    if (!config.redisUrl) {
+      redisAvailable = false;
+      throw new Error('Redis URL not configured');
+    }
 
-    redisClient.on('connect', () => {
-      logger.info('Redis connected');
-    });
+    try {
+      redisClient = new Redis(config.redisUrl, {
+        maxRetriesPerRequest: null, // Required for BullMQ
+        enableReadyCheck: false,
+        lazyConnect: true,
+        retryStrategy(times) {
+          if (times > 3) {
+            redisAvailable = false;
+            return null; // Stop retrying
+          }
+          const delay = Math.min(times * 50, 2000);
+          logger.warn({ times, delay }, 'Redis connection retry');
+          return delay;
+        },
+      });
 
-    redisClient.on('error', (err) => {
-      logger.error({ error: err.message }, 'Redis connection error');
-    });
+      redisClient.on('connect', () => {
+        redisAvailable = true;
+        logger.info('Redis connected');
+      });
 
-    redisClient.on('close', () => {
-      logger.warn('Redis connection closed');
-    });
+      redisClient.on('error', (err) => {
+        logger.error({ error: err.message }, 'Redis connection error');
+      });
+
+      redisClient.on('close', () => {
+        logger.warn('Redis connection closed');
+      });
+    } catch (error) {
+      redisAvailable = false;
+      throw error;
+    }
   }
 
   return redisClient;
