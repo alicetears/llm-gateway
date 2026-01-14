@@ -41,9 +41,21 @@
         <button onclick="toggleAuthMode()" class="text-blue-400 hover:text-blue-300 ml-1" id="auth-switch-btn">Register</button>
       </div>
       
-      <div class="mt-4 text-center text-xs text-gray-500">
+      <div id="register-note" class="mt-4 text-center text-xs text-gray-500">
         First user to register becomes admin
       </div>
+    </div>
+  </div>
+
+  <!-- Registration Disabled Message -->
+  <div id="registration-disabled-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4 text-center">
+      <div class="text-6xl mb-4">🔒</div>
+      <h2 class="text-2xl font-bold mb-4">Registration Disabled</h2>
+      <p class="text-gray-400 mb-6">Registration is currently disabled by the administrator. Please contact the admin if you need access.</p>
+      <button onclick="showLoginOnly()" class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-medium">
+        Back to Login
+      </button>
     </div>
   </div>
 
@@ -78,6 +90,9 @@
         </button>
         <button onclick="showTab('docs')" id="tab-docs" class="tab-btn px-4 py-2 rounded-t-lg text-gray-400 hover:text-white">
           📖 API Docs
+        </button>
+        <button onclick="showTab('admin')" id="tab-admin" class="tab-btn px-4 py-2 rounded-t-lg text-gray-400 hover:text-white hidden">
+          ⚙️ Admin
         </button>
       </div>
 
@@ -265,6 +280,41 @@
         </div>
       </div>
 
+      <!-- Admin Tab (Admin Only) -->
+      <div id="content-admin" class="tab-content">
+        <div class="bg-gray-800 rounded-lg p-6 mb-6">
+          <h2 class="text-xl font-semibold mb-4">⚙️ System Settings</h2>
+          
+          <div class="bg-gray-700 rounded p-4 mb-4">
+            <div class="flex justify-between items-center">
+              <div>
+                <h3 class="font-medium">Public Registration</h3>
+                <p class="text-sm text-gray-400">Allow new users to create accounts</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="registration-toggle" class="sr-only peer" onchange="toggleRegistration()">
+                <div class="w-14 h-7 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
+              </label>
+            </div>
+          </div>
+
+          <div class="bg-yellow-900 border border-yellow-600 rounded p-4">
+            <h3 class="font-medium text-yellow-400 mb-2">⚠️ Security Note</h3>
+            <p class="text-sm text-gray-300">
+              When registration is disabled, only existing users can log in. 
+              This prevents unauthorized access to your LLM gateway.
+            </p>
+          </div>
+        </div>
+
+        <div class="bg-gray-800 rounded-lg p-6">
+          <h2 class="text-xl font-semibold mb-4">👥 Users</h2>
+          <div id="users-list" class="space-y-3">
+            <p class="text-gray-500">Loading...</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Docs Tab -->
       <div id="content-docs" class="tab-content">
         <div class="bg-gray-800 rounded-lg p-6">
@@ -325,12 +375,20 @@
     let authToken = localStorage.getItem('token');
     let currentUser = null;
     let isLoginMode = true;
+    let registrationEnabled = true;
+    let needsSetup = false;
 
     // ============================================================================
     // Auth Functions
     // ============================================================================
 
     function toggleAuthMode() {
+      // Check if registration is allowed before switching to register mode
+      if (isLoginMode && !registrationEnabled && !needsSetup) {
+        document.getElementById('registration-disabled-modal').classList.remove('hidden');
+        return;
+      }
+      
       isLoginMode = !isLoginMode;
       document.getElementById('auth-title').textContent = isLoginMode ? 'Login' : 'Register';
       document.getElementById('auth-submit').textContent = isLoginMode ? 'Login' : 'Register';
@@ -338,6 +396,46 @@
       document.getElementById('auth-switch-btn').textContent = isLoginMode ? 'Register' : 'Login';
       document.getElementById('name-field').classList.toggle('hidden', isLoginMode);
       document.getElementById('auth-error').classList.add('hidden');
+    }
+
+    function showLoginOnly() {
+      document.getElementById('registration-disabled-modal').classList.add('hidden');
+      isLoginMode = true;
+      document.getElementById('auth-title').textContent = 'Login';
+      document.getElementById('auth-submit').textContent = 'Login';
+      document.getElementById('auth-switch-text').textContent = "Don't have an account?";
+      document.getElementById('auth-switch-btn').textContent = 'Register';
+      document.getElementById('name-field').classList.add('hidden');
+    }
+
+    async function checkRegistrationStatus() {
+      try {
+        const res = await fetch('/api/auth/settings');
+        const data = await res.json();
+        registrationEnabled = data.registrationEnabled;
+        needsSetup = data.needsSetup;
+        
+        // Update UI based on registration status
+        const switchBtn = document.getElementById('auth-switch-btn');
+        const switchText = document.getElementById('auth-switch-text');
+        const registerNote = document.getElementById('register-note');
+        
+        if (needsSetup) {
+          // First time setup - show register mode
+          isLoginMode = false;
+          document.getElementById('auth-title').textContent = 'Create Admin Account';
+          document.getElementById('auth-submit').textContent = 'Create Admin';
+          document.getElementById('name-field').classList.remove('hidden');
+          switchBtn.classList.add('hidden');
+          switchText.classList.add('hidden');
+          registerNote.textContent = 'This will be the admin account with full access.';
+        } else if (!registrationEnabled) {
+          // Registration disabled - show login only
+          registerNote.textContent = 'Registration is disabled. Contact admin for access.';
+        }
+      } catch (err) {
+        console.error('Failed to check registration status:', err);
+      }
     }
 
     document.getElementById('auth-form').addEventListener('submit', async (e) => {
@@ -408,6 +506,15 @@
       document.getElementById('auth-modal').classList.add('hidden');
       document.getElementById('app').classList.remove('hidden');
       document.getElementById('user-info').textContent = `${currentUser?.email} (${currentUser?.role})`;
+      
+      // Show admin tab only for admins
+      if (currentUser?.role === 'admin') {
+        document.getElementById('tab-admin').classList.remove('hidden');
+        loadAdminSettings();
+      } else {
+        document.getElementById('tab-admin').classList.add('hidden');
+      }
+      
       loadKeys();
     }
 
@@ -437,6 +544,7 @@
       if (tab === 'keys') loadKeys();
       if (tab === 'tokens') loadTokens();
       if (tab === 'stats') loadStats();
+      if (tab === 'admin') loadAdminSettings();
     }
 
     // ============================================================================
@@ -701,7 +809,49 @@
       alert('Token copied to clipboard!');
     }
 
+    // ============================================================================
+    // Admin Functions
+    // ============================================================================
+
+    async function loadAdminSettings() {
+      if (currentUser?.role !== 'admin') return;
+
+      try {
+        const res = await apiRequest('/api/auth/settings');
+        const data = await res.json();
+        
+        document.getElementById('registration-toggle').checked = data.registrationEnabled;
+      } catch (err) {
+        console.error('Failed to load admin settings:', err);
+      }
+    }
+
+    async function toggleRegistration() {
+      const toggle = document.getElementById('registration-toggle');
+      const enabled = toggle.checked;
+
+      try {
+        const res = await apiRequest('/api/auth/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ registrationEnabled: enabled }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          alert(data.message);
+        } else {
+          alert(`Error: ${data.error?.message}`);
+          toggle.checked = !enabled; // Revert
+        }
+      } catch (err) {
+        alert(`Error: ${err.message}`);
+        toggle.checked = !enabled; // Revert
+      }
+    }
+
     // Initial auth check
+    checkRegistrationStatus();
     checkAuth();
   </script>
 </body>

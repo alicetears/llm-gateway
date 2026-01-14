@@ -35,12 +35,62 @@ function getClientIP(req: VercelRequest): string {
 }
 
 // ============================================================================
+// Auth Helper
+// ============================================================================
+
+async function getAuthUser(req: VercelRequest): Promise<{ userId: string; email: string; role: string } | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  
+  try {
+    const token = authHeader.slice(7);
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return {
+      userId: payload.userId as string,
+      email: payload.email as string,
+      role: payload.role as string,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// System Settings Helper
+// ============================================================================
+
+async function getSystemSettings() {
+  const prisma = getPrismaClient();
+  
+  // Get or create system settings (singleton pattern)
+  let settings = await prisma.systemSettings.findUnique({
+    where: { id: 'system' },
+  });
+  
+  if (!settings) {
+    // First time: check if admin exists to set initial state
+    const adminExists = await prisma.user.findFirst({ where: { role: 'admin' } });
+    
+    settings = await prisma.systemSettings.create({
+      data: {
+        id: 'system',
+        // SECURITY: If admin exists, disable registration by default
+        // If no admin, enable registration so first user can register
+        registrationEnabled: !adminExists,
+      },
+    });
+  }
+  
+  return settings;
+}
+
+// ============================================================================
 // Auth API Handler
 // ============================================================================
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
@@ -65,6 +115,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMe(req, res);
     }
 
+    // GET /api/auth/settings - Get registration status (public)
+    if (req.method === 'GET' && path === '/api/auth/settings') {
+      return await handleGetSettings(res);
+    }
+
+    // PUT /api/auth/settings - Admin only: toggle registration
+    if (req.method === 'PUT' && path === '/api/auth/settings') {
+      return await handleUpdateSettings(req, res);
+    }
+
     return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found' } });
   } catch (error) {
     console.error('Auth error:', error);
@@ -73,11 +133,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 // ============================================================================
-// Register
+// Register - With Registration Gate
 // ============================================================================
 
 async function handleRegister(req: VercelRequest, res: VercelResponse) {
-  const { email, password, name } = req.body;
+  const { email, password, name, role: requestedRole } = req.body;
+
+  // SECURITY: Reject any attempt to self-assign admin role
+  if (requestedRole === 'admin') {
+    return res.status(403).json({ 
+      error: { code: 'FORBIDDEN', message: 'Cannot self-assign admin role' } 
+    });
+  }
 
   if (!email || !password) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Email and password required' } });
@@ -89,15 +156,33 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
 
   const prisma = getPrismaClient();
 
+  // Check if this is the first user (will become admin)
+  const userCount = await prisma.user.count();
+  const isFirstUser = userCount === 0;
+
+  // SECURITY: Check registration gate (skip for first user who becomes admin)
+  if (!isFirstUser) {
+    const settings = await getSystemSettings();
+    
+    if (!settings.registrationEnabled) {
+      // SECURITY: Registration is disabled by admin
+      return res.status(403).json({ 
+        error: { 
+          code: 'REGISTRATION_DISABLED', 
+          message: 'Registration is currently disabled by the administrator.' 
+        } 
+      });
+    }
+  }
+
   // Check if user exists
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return res.status(400).json({ error: { code: 'USER_EXISTS', message: 'Email already registered' } });
   }
 
-  // Check if this is the first user (make them admin)
-  const userCount = await prisma.user.count();
-  const role = userCount === 0 ? 'admin' : 'user';
+  // SECURITY: First user becomes admin, all others are regular users
+  const role = isFirstUser ? 'admin' : 'user';
 
   // Hash password
   const passwordHash = await bcrypt.hash(password, 10);
@@ -119,6 +204,22 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
     },
   });
 
+  // SECURITY: If first user (admin) was just created, disable registration
+  if (isFirstUser) {
+    await prisma.systemSettings.upsert({
+      where: { id: 'system' },
+      create: {
+        id: 'system',
+        registrationEnabled: false, // Disable after admin created
+        updatedBy: user.id,
+      },
+      update: {
+        registrationEnabled: false,
+        updatedBy: user.id,
+      },
+    });
+  }
+
   // Generate token
   const token = await new SignJWT({ userId: user.id, email: user.email, role: user.role })
     .setProtectedHeader({ alg: 'HS256' })
@@ -128,12 +229,14 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
   return res.status(201).json({
     user,
     token,
-    message: role === 'admin' ? 'Admin account created!' : 'Account created!',
+    message: role === 'admin' 
+      ? 'Admin account created! Registration is now disabled.' 
+      : 'Account created!',
   });
 }
 
 // ============================================================================
-// Login
+// Login - Always allowed for existing users
 // ============================================================================
 
 async function handleLogin(req: VercelRequest, res: VercelResponse) {
@@ -159,6 +262,7 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' } });
   }
 
+  // SECURITY: Existing users can always log in (registration gate doesn't affect login)
   if (!user.enabled) {
     return res.status(401).json({ error: { code: 'ACCOUNT_DISABLED', message: 'Account is disabled' } });
   }
@@ -197,37 +301,111 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 // ============================================================================
 
 async function handleMe(req: VercelRequest, res: VercelResponse) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
+  const user = await getAuthUser(req);
+  if (!user) {
     return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'No token provided' } });
   }
 
-  const token = authHeader.slice(7);
+  const prisma = getPrismaClient();
 
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    const prisma = getPrismaClient();
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      createdAt: true,
+      lastLoginAt: true,
+    },
+  });
 
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId as string },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-        lastLoginAt: true,
-      },
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not found' } });
-    }
-
-    return res.status(200).json({ user });
-  } catch {
-    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
+  if (!dbUser) {
+    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'User not found' } });
   }
+
+  // Include settings for admin users
+  let settings = null;
+  if (dbUser.role === 'admin') {
+    settings = await getSystemSettings();
+  }
+
+  return res.status(200).json({ 
+    user: dbUser,
+    settings: settings ? { registrationEnabled: settings.registrationEnabled } : undefined,
+  });
+}
+
+// ============================================================================
+// Get Settings (Public) - Shows registration status
+// ============================================================================
+
+async function handleGetSettings(res: VercelResponse) {
+  const settings = await getSystemSettings();
+  const prisma = getPrismaClient();
+  
+  // Check if any admin exists
+  const adminExists = await prisma.user.findFirst({ where: { role: 'admin' } });
+  
+  return res.status(200).json({
+    registrationEnabled: settings.registrationEnabled,
+    // SECURITY: Only reveal if first user needs to be created
+    needsSetup: !adminExists,
+  });
+}
+
+// ============================================================================
+// Update Settings (Admin Only) - Toggle registration
+// ============================================================================
+
+async function handleUpdateSettings(req: VercelRequest, res: VercelResponse) {
+  // SECURITY: Require valid JWT
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+  }
+
+  // SECURITY: Admin role check - only admins can modify settings
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin access required' } });
+  }
+
+  const { registrationEnabled } = req.body;
+
+  if (typeof registrationEnabled !== 'boolean') {
+    return res.status(400).json({ 
+      error: { code: 'VALIDATION_ERROR', message: 'registrationEnabled must be a boolean' } 
+    });
+  }
+
+  const prisma = getPrismaClient();
+
+  // SECURITY: Verify user is still admin in database (prevent stale tokens)
+  const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
+  if (!dbUser || dbUser.role !== 'admin') {
+    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin access required' } });
+  }
+
+  // Update settings
+  const settings = await prisma.systemSettings.upsert({
+    where: { id: 'system' },
+    create: {
+      id: 'system',
+      registrationEnabled,
+      updatedBy: user.userId,
+    },
+    update: {
+      registrationEnabled,
+      updatedBy: user.userId,
+    },
+  });
+
+  return res.status(200).json({
+    registrationEnabled: settings.registrationEnabled,
+    message: registrationEnabled 
+      ? 'Registration enabled. New users can now register.' 
+      : 'Registration disabled. Only existing users can log in.',
+  });
 }
 
 // ============================================================================
