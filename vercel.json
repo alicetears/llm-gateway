@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "buildCommand": "npx prisma generate && npm run build",
+  "installCommand": "npm install",
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/health/(.*)",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/health"
+    }
+  ],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "REDIS_URL": "@redis_url"
+  }
+}

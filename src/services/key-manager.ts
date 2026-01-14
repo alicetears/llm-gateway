@@ -1,5 +1,5 @@
 import { getPrismaClient } from '../utils/database.js';
-import { getNextRoundRobinIndex } from '../utils/redis.js';
+import { isRedisAvailable, getNextRoundRobinIndex } from '../utils/redis.js';
 import { createLogger } from '../utils/logger.js';
 import { config } from '../config/index.js';
 import type {
@@ -12,6 +12,9 @@ import type {
 import { NoEligibleKeyError } from '../types/index.js';
 
 const logger = createLogger('key-manager');
+
+// In-memory round-robin index for serverless mode
+const localRoundRobinIndex = new Map<string, number>();
 
 // ============================================================================
 // Key Manager Service
@@ -241,8 +244,32 @@ export class KeyManager {
     // Get the provider from the first key (all keys in group have same priority)
     const provider = keys[0]!.provider;
     
-    const index = await getNextRoundRobinIndex(provider, priority, keys.length);
+    let index: number;
+    
+    // Try Redis first, fall back to local state for serverless
+    if (isRedisAvailable()) {
+      try {
+        index = await getNextRoundRobinIndex(provider, priority, keys.length);
+      } catch {
+        // Fall back to local round-robin
+        index = this.getLocalRoundRobinIndex(provider, priority, keys.length);
+      }
+    } else {
+      index = this.getLocalRoundRobinIndex(provider, priority, keys.length);
+    }
+    
     return keys[index]!;
+  }
+
+  /**
+   * Local round-robin for serverless mode (no Redis)
+   */
+  private getLocalRoundRobinIndex(provider: string, priority: number, totalKeys: number): number {
+    const key = `${provider}:${priority}`;
+    const current = localRoundRobinIndex.get(key) || 0;
+    const next = (current + 1) % totalKeys;
+    localRoundRobinIndex.set(key, next);
+    return current;
   }
 
   /**
