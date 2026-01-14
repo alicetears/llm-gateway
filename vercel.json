@@ -11,6 +11,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/auth/(.*)",
+      "destination": "/api/auth"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index"
     },
