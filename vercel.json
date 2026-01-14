@@ -21,9 +21,5 @@
       "source": "/health",
       "destination": "/api/health"
     }
-  ],
-  "env": {
-    "DATABASE_URL": "@database_url",
-    "REDIS_URL": "@redis_url"
-  }
+  ]
 }
