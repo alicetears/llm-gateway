@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # LLM Gateway API
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgresql://llmgateway:password@postgres:5432/llm_gateway
+      - REDIS_URL=redis://redis:6379
+      - KEY_SELECTION_STRATEGY=exhaust-first
+      - ENABLE_LLM_HEADERS=true
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Queue Worker
+  worker:
+    build: .
+    command: ["node", "dist/queue/worker.js"]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://llmgateway:password@postgres:5432/llm_gateway
+      - REDIS_URL=redis://redis:6379
+      - QUEUE_CONCURRENCY=10
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=llmgateway
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=llm_gateway
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U llmgateway -d llm_gateway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

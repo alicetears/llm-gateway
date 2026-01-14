@@ -1,0 +1,117 @@
+// Prisma schema for LLM Gateway API
+// Supports key-aware model routing with provider priority
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Supported LLM providers
+enum Provider {
+  openrouter
+  openai
+  anthropic
+  gemini
+  mistral
+  groq
+  together
+  fireworks
+  deepseek
+}
+
+// API Keys table with model routing capabilities
+model LlmApiKey {
+  id             String    @id @default(uuid())
+  provider       Provider
+  apiKey         String    @map("api_key")
+  name           String?   // Optional friendly name for the key
+  priority       Int       @default(1)
+  enabled        Boolean   @default(true)
+  
+  // Model routing
+  allowedModels  String[]  @map("allowed_models") // Models this key can access
+  defaultModel   String    @map("default_model")  // Default model for this key
+  
+  // Rate limiting
+  dailyLimit     Int?      @map("daily_limit")    // Max requests per day (null = unlimited)
+  usedToday      Int       @default(0) @map("used_today")
+  resetDate      DateTime  @default(now()) @map("reset_date")
+  
+  // Metadata
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastUsedAt     DateTime? @map("last_used_at")
+  
+  // Usage tracking relation
+  usageLogs      UsageLog[]
+
+  @@map("llm_api_keys")
+  @@index([provider, enabled])
+  @@index([priority])
+  @@index([resetDate])
+}
+
+// Usage logging for observability
+model UsageLog {
+  id              String    @id @default(uuid())
+  keyId           String    @map("key_id")
+  key             LlmApiKey @relation(fields: [keyId], references: [id], onDelete: Cascade)
+  
+  provider        Provider
+  model           String
+  requestedModel  String?   @map("requested_model") // What was originally requested
+  
+  // Request metadata
+  promptTokens    Int?      @map("prompt_tokens")
+  completionTokens Int?     @map("completion_tokens")
+  totalTokens     Int?      @map("total_tokens")
+  
+  // Timing
+  latencyMs       Int?      @map("latency_ms")
+  
+  // Status
+  success         Boolean   @default(true)
+  errorMessage    String?   @map("error_message")
+  
+  // Request tracking
+  requestId       String?   @map("request_id")
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("usage_logs")
+  @@index([keyId])
+  @@index([provider])
+  @@index([createdAt])
+  @@index([requestId])
+}
+
+// Request queue for async processing (optional, for high-throughput scenarios)
+model RequestQueue {
+  id              String    @id @default(uuid())
+  status          String    @default("pending") // pending, processing, completed, failed
+  
+  // Request data
+  payload         Json
+  
+  // Processing info
+  assignedKeyId   String?   @map("assigned_key_id")
+  attempts        Int       @default(0)
+  maxAttempts     Int       @default(3) @map("max_attempts")
+  
+  // Result
+  response        Json?
+  error           String?
+  
+  // Timing
+  createdAt       DateTime  @default(now()) @map("created_at")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  
+  @@map("request_queue")
+  @@index([status])
+  @@index([createdAt])
+}
