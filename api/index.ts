@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { v4 as uuidv4 } from 'uuid';
 import { jwtVerify } from 'jose';
+import crypto from 'crypto';
 import { ChatRequestSchema } from '../src/types/index.js';
-import { getRouter } from '../src/services/router.js';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'INSECURE-CHANGE-ME');
 
@@ -123,11 +123,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 // ============================================================================
+// API Token Validation
+// ============================================================================
+
+async function validateApiToken(rawToken: string): Promise<{ userId: string } | null> {
+  if (!rawToken.startsWith('llm_')) {
+    return null;
+  }
+
+  const { getPrismaClient } = await import('../src/utils/database.js');
+  const prisma = getPrismaClient();
+  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  const token = await prisma.apiToken.findUnique({
+    where: { token: hashedToken },
+  });
+
+  if (!token || !token.enabled) {
+    return null;
+  }
+
+  // Check expiry
+  if (token.expiresAt && token.expiresAt < new Date()) {
+    return null;
+  }
+
+  // Update usage stats
+  await prisma.apiToken.update({
+    where: { id: token.id },
+    data: {
+      lastUsedAt: new Date(),
+      usageCount: { increment: 1 },
+    },
+  });
+
+  return { userId: token.userId };
+}
+
+// ============================================================================
 // Chat Request Handler
 // ============================================================================
 
 async function handleChatRequest(req: VercelRequest, res: VercelResponse) {
   const requestId = (req.headers['x-request-id'] as string) || uuidv4();
+
+  // Check for API token in Authorization header
+  const authHeader = req.headers.authorization;
+  let userId: string | null = null;
+
+  if (authHeader?.startsWith('Bearer llm_')) {
+    const token = authHeader.slice(7);
+    const tokenUser = await validateApiToken(token);
+    if (!tokenUser) {
+      return res.status(401).json({
+        error: { code: 'INVALID_TOKEN', message: 'Invalid or expired API token' },
+        requestId,
+      });
+    }
+    userId = tokenUser.userId;
+  } else if (authHeader?.startsWith('Bearer ')) {
+    // JWT token - extract userId
+    try {
+      const token = authHeader.slice(7);
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      userId = payload.userId as string;
+    } catch {
+      return res.status(401).json({
+        error: { code: 'INVALID_TOKEN', message: 'Invalid token' },
+        requestId,
+      });
+    }
+  } else {
+    return res.status(401).json({
+      error: { code: 'UNAUTHORIZED', message: 'API token required. Generate one in the dashboard.' },
+      requestId,
+    });
+  }
 
   // Validate request body
   const parseResult = ChatRequestSchema.safeParse({
@@ -153,21 +224,48 @@ async function handleChatRequest(req: VercelRequest, res: VercelResponse) {
 
   const validatedBody = parseResult.data;
 
-  // Process the request
-  const router = getRouter();
-  const { response, metadata } = await router.route(validatedBody);
+  // Get user's keys only
+  const { getPrismaClient } = await import('../src/utils/database.js');
+  const prisma = getPrismaClient();
+  
+  const userKeys = await prisma.llmApiKey.findMany({
+    where: { 
+      userId,
+      enabled: true,
+    },
+  });
+
+  if (userKeys.length === 0) {
+    return res.status(400).json({
+      error: { code: 'NO_KEYS', message: 'No API keys configured. Add keys in the dashboard first.' },
+      requestId,
+    });
+  }
+
+  // Process the request with user's keys
+  const { routeWithKeys } = await import('../src/services/user-router.js');
+  const result = await routeWithKeys(validatedBody, userKeys);
+
+  if (!result.success) {
+    return res.status(result.statusCode || 500).json({
+      error: { code: result.errorCode || 'ERROR', message: result.error || 'Request failed' },
+      requestId,
+    });
+  }
+
+  const { response, metadata } = result;
 
   // Add LLM headers
-  res.setHeader('X-LLM-Provider', metadata.provider);
-  res.setHeader('X-LLM-Model', metadata.model);
-  res.setHeader('X-LLM-Key-ID', metadata.keyId);
-  res.setHeader('X-LLM-Latency-Ms', metadata.latencyMs.toString());
+  res.setHeader('X-LLM-Provider', metadata!.provider);
+  res.setHeader('X-LLM-Model', metadata!.model);
+  res.setHeader('X-LLM-Key-ID', metadata!.keyId);
+  res.setHeader('X-LLM-Latency-Ms', metadata!.latencyMs.toString());
 
   return res.status(200).json({
-    id: response.id,
-    provider: response.provider,
-    model: response.model,
-    choices: response.choices.map((choice) => ({
+    id: response!.id,
+    provider: response!.provider,
+    model: response!.model,
+    choices: response!.choices.map((choice) => ({
       index: choice.index,
       message: {
         role: choice.message.role,
@@ -175,8 +273,8 @@ async function handleChatRequest(req: VercelRequest, res: VercelResponse) {
       },
       finishReason: choice.finishReason,
     })),
-    usage: response.usage,
-    created: response.created,
+    usage: response!.usage,
+    created: response!.created,
   });
 }
 
